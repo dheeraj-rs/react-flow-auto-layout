@@ -10,7 +10,6 @@ import ReactFlow, {
   Position,
   MarkerType,
   useReactFlow,
-  SmoothStepEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -78,13 +77,7 @@ const CustomEdge = ({
 }) => {
   const midX = (sourceX + targetX) / 2;
 
-  // Use a larger offset to avoid overlap
-  // const offset = Math.random() * 40 - 20; // Larger offset range
-  // const path = `M${sourceX},${sourceY} Q${midX + offset},${
-  //   (sourceY + targetY) / 2
-  // },${targetX},${targetY}`;
-
-  const offset = Math.random() * 40 - 10; // Random offset to avoid overlap
+  const offset = Math.random() * 20 - 10; // Random offset to avoid overlap
   const path = `M${sourceX},${sourceY} L${midX + offset},${sourceY} L${
     midX + offset
   },${targetY} L${targetX},${targetY}`;
@@ -101,7 +94,6 @@ const CustomEdge = ({
 };
 
 const edgeTypes = {
-  // custom: SmoothStepEdge,
   custom: CustomEdge,
 };
 
@@ -121,13 +113,10 @@ const nodeTypes = {
 function FlowApp() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { fitView } = useReactFlow();
-
+  const { fitView, getViewport } = useReactFlow();
   const [shouldArrange, setShouldArrange] = useState(false);
   const layoutAppliedRef = useRef(false);
   const [edgeDragging, setEdgeDragging] = useState(false); // To track if an edge is being dragged
-
-  const ZOOM_LEVEL = 1; // Adjust this value as needed
 
   const sortChildrenMap = useCallback((childrenMap) => {
     const sortedMap = new Map();
@@ -168,9 +157,9 @@ function FlowApp() {
       determineLevel('1');
 
       const NODE_WIDTH = 150;
-      const NODE_HEIGHT = 40;
-      const HORIZONTAL_SPACING = NODE_WIDTH * 1.5; // Increased spacing
-      const VERTICAL_SPACING = NODE_HEIGHT * 1; // Increased spacing
+      const NODE_HEIGHT = 50;
+      const HORIZONTAL_SPACING = NODE_WIDTH * 1;
+      const VERTICAL_SPACING = NODE_HEIGHT * 1;
 
       const positionNode = (nodeId, x = 0, y = 0, level = 0) => {
         const node = nodeMap.get(nodeId);
@@ -204,14 +193,14 @@ function FlowApp() {
   );
 
   const applyLayout = useCallback(() => {
-    const ZOOM_LEVEL = 0.7; // Adjust this value as needed
+    if (layoutAppliedRef.current) return; // Avoid applying layout if it's already applied
 
-    if (layoutAppliedRef.current) return;
     const newNodes = customLayout(nodes, edges);
     setNodes(newNodes);
-    fitView({ padding: 0.2, minZoom: ZOOM_LEVEL, maxZoom: ZOOM_LEVEL });
-    layoutAppliedRef.current = true;
+    fitView({ padding: 0.2 });
+    layoutAppliedRef.current = true; // Mark layout as applied
   }, [nodes, edges, setNodes, fitView, customLayout]);
+
   useEffect(() => {
     if (shouldArrange) {
       layoutAppliedRef.current = false; // Reset layout applied status
@@ -245,52 +234,25 @@ function FlowApp() {
         style: arrowStyle,
       };
 
-      const updatedNodes = [...nodes, newNode];
-      const updatedEdges = [...edges, newEdge];
+      setNodes((nds) => [...nds, newNode]);
+      setEdges((eds) => [...eds, newEdge]);
 
-      // Apply layout immediately
-      const arrangedNodes = customLayout(updatedNodes, updatedEdges);
+      // Schedule layout update after adding nodes and edges
+      requestAnimationFrame(() => {
+        setShouldArrange(true);
+      });
 
-      setNodes(arrangedNodes);
-      setEdges(updatedEdges);
-
-      // Highlight and focus on the new node
-      setTimeout(() => {
-        const lastNode = arrangedNodes[arrangedNodes.length - 1];
-        fitView({
-          nodes: [lastNode],
-          duration: 500,
-          padding: 0.2,
-          minZoom: ZOOM_LEVEL,
-          maxZoom: ZOOM_LEVEL,
-        });
-
-        // Optionally, you can add a visual highlight to the new node
-        setNodes((nds) =>
-          nds.map((node) =>
-            node.id === lastNode.id
-              ? {
-                  ...node,
-                  style: { ...node.style, boxShadow: '0 0 10px #ff0' },
-                }
-              : node
-          )
-        );
-
-        // Remove the highlight after a short delay
-        setTimeout(() => {
-          setNodes((nds) =>
-            nds.map((node) =>
-              node.id === lastNode.id
-                ? { ...node, style: { ...node.style, boxShadow: 'none' } }
-                : node
-            )
-          );
-        }, 1000); // Remove highlight after 1 second
-      }, 0);
+      // Focus the new node
+      requestAnimationFrame(() => {
+        fitView({ padding: 0.2, nodes: [newNode] });
+        // Get viewport to focus on the new node
+        const { zoom } = getViewport();
+        fitView({ nodes: [newNode], zoom });
+      });
     },
-    [nodes, edges, setNodes, setEdges, customLayout, fitView]
+    [nodes, setNodes, setEdges, fitView, getViewport]
   );
+
   const handleAutoArrange = () => {
     setShouldArrange(true);
   };

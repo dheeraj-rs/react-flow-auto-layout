@@ -101,8 +101,8 @@ const CustomEdge = ({
 };
 
 const edgeTypes = {
-  // custom: SmoothStepEdge,
-  custom: CustomEdge,
+  custom: SmoothStepEdge,
+  //   custom: CustomEdge,
 };
 
 const arrowStyle = {

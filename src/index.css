@@ -16,3 +16,9 @@ body,
   padding: 0;
   overflow: hidden;
 }
+
+.react-flow__edge-path {
+  fill: none;
+  stroke: #222;
+  stroke-width: 2px;
+}

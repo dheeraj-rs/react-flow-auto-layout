@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -6,9 +6,11 @@ import ReactFlow, {
   useEdgesState,
   addEdge,
   ReactFlowProvider,
-  useReactFlow,
+  Handle,
+  Position,
   SmoothStepEdge,
   MarkerType,
+  useReactFlow,
 } from 'reactflow';
 import dagre from 'dagre';
 import 'reactflow/dist/style.css';
@@ -16,21 +18,21 @@ import 'reactflow/dist/style.css';
 const initialNodes = [
   {
     id: '1',
-    data: { label: 'Node 1' },
+    data: { label: 'Node 1', addNode: null },
     position: { x: 0, y: 0 },
+    type: 'custom',
     style: { backgroundColor: '#0f172a', color: '#fff' },
   },
 ];
 
 const initialEdges = [];
 
-const getLayoutedElements = (nodes, edges, direction = 'LR', spacing = 50) => {
+const getLayoutedElements = (nodes, edges, spacing = 50) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  const isHorizontal = direction === 'LR' || direction === 'TB';
   dagreGraph.setGraph({
-    rankdir: direction,
+    rankdir: 'LR',
     nodesep: spacing,
     ranksep: spacing,
   });
@@ -47,18 +49,65 @@ const getLayoutedElements = (nodes, edges, direction = 'LR', spacing = 50) => {
 
   nodes.forEach((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
-    node.targetPosition = isHorizontal ? 'left' : 'top';
-    node.sourcePosition = isHorizontal ? 'right' : 'bottom';
-
     node.position = {
-      x: nodeWithPosition.x - 75,
-      y: nodeWithPosition.y - 25,
+      x: nodeWithPosition.x - 75, // Center the node
+      y: nodeWithPosition.y - 25, // Center the node
     };
 
     return node;
   });
 
   return { nodes, edges };
+};
+
+const CustomNode = ({ id, data }) => {
+  const handleAddNode = useCallback(
+    (handleId, event) => {
+      const { clientX, clientY } = event;
+      data.addNode(id, handleId, clientX, clientY);
+    },
+    [id, data]
+  );
+
+  return (
+    <div
+      style={{
+        backgroundColor: '#0f172a',
+        color: '#fff',
+        padding: 10,
+        borderRadius: 5,
+        position: 'relative',
+      }}
+    >
+      {data.label}
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{ background: '#555' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="a"
+        style={{ top: '25%', background: '#555' }}
+        onMouseDown={(event) => handleAddNode('a', event)}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="b"
+        style={{ top: '50%', background: '#555' }}
+        onMouseDown={(event) => handleAddNode('b', event)}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="c"
+        style={{ top: '75%', background: '#555' }}
+        onMouseDown={(event) => handleAddNode('c', event)}
+      />
+    </div>
+  );
 };
 
 const edgeTypes = {
@@ -74,29 +123,29 @@ const arrowStyle = {
   },
 };
 
+const nodeTypes = {
+  custom: CustomNode,
+};
+
 function FlowApp() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [direction, setDirection] = useState('LR');
-  const [spacing, setSpacing] = useState(50);
   const { fitView } = useReactFlow();
 
   const applyLayout = useCallback(
-    (newDirection) => {
-      console.log('newDirection :', newDirection);
+    (nodes, edges) => {
       const { nodes: layoutedNodes, edges: layoutedEdges } =
-        getLayoutedElements(nodes, edges, newDirection, spacing);
+        getLayoutedElements(nodes, edges);
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
-      setDirection(newDirection);
       fitView({ padding: 0.2 });
     },
-    [nodes, edges, spacing, fitView]
+    [setNodes, setEdges, fitView]
   );
 
   useEffect(() => {
-    applyLayout(direction);
-  }, []);
+    applyLayout(nodes, edges);
+  }, []); // Run once on mount
 
   const onConnect = useCallback(
     (params) => {
@@ -105,6 +154,7 @@ function FlowApp() {
           {
             ...params,
             type: 'custom',
+            markerEnd: { type: MarkerType.ArrowClosed },
             style: arrowStyle,
           },
           eds
@@ -114,28 +164,54 @@ function FlowApp() {
     [setEdges]
   );
 
-  const onNodeClick = useCallback(
-    (event, node) => {
-      const newNodeId = (nodes.length + 1).toString();
+  const addNode = useCallback(
+    (sourceNodeId, handleId, clientX, clientY) => {
+      const newNodeId = `node-${nodes.length + 1}`;
+
+      // Find the source node
+      const sourceNode = nodes.find((node) => node.id === sourceNodeId);
+      if (!sourceNode) return;
+
+      // Calculate the new node position based on source handle
+      const handleOffsets = {
+        a: { x: 200, y: -100 },
+        b: { x: 200, y: 0 },
+        c: { x: 200, y: 100 },
+      };
+
+      const offset = handleOffsets[handleId] || { x: 200, y: 0 };
+      const newNodePosition = {
+        x: sourceNode.position.x + offset.x,
+        y: sourceNode.position.y + offset.y,
+      };
+
+      // Create the new node
       const newNode = {
         id: newNodeId,
-        data: { label: `Node ${newNodeId}` },
-        position: { x: 0, y: 0 },
+        data: { label: `Node ${nodes.length + 1}`, addNode },
+        position: newNodePosition,
+        type: 'custom',
         style: { backgroundColor: '#0f172a', color: '#fff' },
       };
+
+      // Create the new edge
       const newEdge = {
-        id: `e${node.id}-${newNodeId}`,
-        source: node.id,
+        id: `e${sourceNodeId}-${newNodeId}`,
+        source: sourceNodeId,
         target: newNodeId,
+        sourceHandle: handleId,
         type: 'custom',
+        markerEnd: { type: MarkerType.ArrowClosed },
         style: arrowStyle,
       };
 
+      // Update nodes and edges
       const newNodes = [...nodes, newNode];
       const newEdges = [...edges, newEdge];
 
+      // Reapply the layout to avoid overlap
       const { nodes: layoutedNodes, edges: layoutedEdges } =
-        getLayoutedElements(newNodes, newEdges, direction, spacing);
+        getLayoutedElements(newNodes, newEdges);
 
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
@@ -150,30 +226,27 @@ function FlowApp() {
         });
       }, 0);
     },
-    [nodes, edges, direction, spacing, fitView]
+    [nodes, edges, setNodes, setEdges, fitView]
   );
 
-  const resetLayout = () => {
-    setNodes(initialNodes);
-    setEdges(initialEdges);
-    applyLayout(direction);
-  };
-
-  const autoReArrange = () => {
-    applyLayout(direction);
-  };
+  const autoReArrange = useCallback(() => {
+    applyLayout(nodes, edges);
+  }, [nodes, edges, applyLayout]);
 
   return (
     <div
       style={{ width: '100vw', height: '100vh', backgroundColor: '#334155' }}
     >
       <ReactFlow
-        nodes={nodes}
+        nodes={nodes.map((node) => ({
+          ...node,
+          data: { ...node.data, addNode },
+        }))}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onNodeClick={onNodeClick}
+        nodeTypes={nodeTypes}
         fitView
         edgeTypes={edgeTypes}
       >
@@ -192,20 +265,7 @@ function FlowApp() {
           boxShadow: '0 0 10px rgba(0,0,0,0.3)',
         }}
       >
-        <h4>Settings</h4>
-        <button onClick={() => applyLayout('TB')}>Vertical Layout</button>
-        <button onClick={() => applyLayout('LR')}>Horizontal Layout</button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <label>Spacing:</label>
-          <input
-            type="number"
-            value={spacing}
-            onChange={(e) => setSpacing(Number(e.target.value))}
-            style={{ marginTop: '10px', marginBottom: '10px', width: '100%' }}
-          />
-        </div>
-        <button onClick={resetLayout}>Reset Layout</button>
-        <button onClick={autoReArrange}>Auto Re-arrange</button>
+        <button onClick={autoReArrange}>Auto arrange</button>
       </div>
     </div>
   );
