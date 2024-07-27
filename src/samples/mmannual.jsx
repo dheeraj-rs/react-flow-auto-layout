@@ -10,6 +10,7 @@ import ReactFlow, {
   Position,
   MarkerType,
   useReactFlow,
+  getBezierPath,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -28,8 +29,8 @@ const initialEdges = [];
 const CustomNode = ({ id, data }) => {
   const handleAddNode = useCallback(
     (handleId, event) => {
-      event.preventDefault();
-      data.addNode(id, handleId);
+      const { clientX, clientY } = event;
+      data.addNode(id, handleId, clientX, clientY);
     },
     [id, data]
   );
@@ -66,23 +67,33 @@ const CustomNode = ({ id, data }) => {
 
 const CustomEdge = ({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
   targetY,
+  sourcePosition,
+  targetPosition,
   style = {},
   markerEnd,
+  data,
 }) => {
-  const midX = (sourceX + targetX) / 2;
-
-  const path = `M${sourceX},${sourceY} L${midX},${sourceY} L${midX},${targetY} L${targetX},${targetY}`;
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
 
   return (
     <path
       id={id}
       style={style}
       className="react-flow__edge-path"
-      d={path}
+      d={edgePath}
       markerEnd={markerEnd}
     />
   );
@@ -94,7 +105,7 @@ const edgeTypes = {
 
 const arrowStyle = {
   stroke: '#94a3b8',
-  strokeWidth: 1.5,
+  strokeWidth: 2,
   markerEnd: {
     type: MarkerType.ArrowClosed,
     color: '#94a3b8',
@@ -108,124 +119,84 @@ const nodeTypes = {
 function FlowApp() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [visibleNodes, setVisibleNodes] = useState(new Set(['1']));
+  const [visibleEdges, setVisibleEdges] = useState([]);
   const { fitView } = useReactFlow();
-  const [shouldArrange, setShouldArrange] = useState(false);
 
-  // Function to sort the Map values based on the handle key
-  function sortChildrenMap(childrenMap) {
-    const sortedMap = new Map();
-
-    for (const [key, children] of childrenMap.entries()) {
-      // Sort the children array
-      const sortedChildren = children.sort((a, b) =>
-        a.handle.localeCompare(b.handle)
-      );
-      sortedMap.set(key, sortedChildren);
-    }
-
-    return sortedMap;
-  }
-
-  // Define a custom layout function using useCallback to memoize it
   const customLayout = useCallback((nodes, edges) => {
-    // Create a map of nodes with their ids as keys for easy lookup
     const nodeMap = new Map(nodes.map((node) => [node.id, { ...node }]));
-    // Create a map to store children of each node
     const childrenMap = new Map();
+    const levels = new Map();
 
-    // Build the tree structure by iterating through edges
+    // Build the tree structure and determine levels
     edges.forEach((edge) => {
-      // Initialize the children array for the source node if not already present
       if (!childrenMap.has(edge.source)) {
         childrenMap.set(edge.source, []);
       }
-      // Add the target node to the children array of the source node
       childrenMap
         .get(edge.source)
         .push({ id: edge.target, handle: edge.sourceHandle });
     });
 
-    // Sort the childrenMap
-    const sortedChildrenMap = sortChildrenMap(childrenMap);
-
-    console.log('sortedChildrenMap : ', sortedChildrenMap);
-    // Create a map to store levels of each node
-    const levels = new Map();
-
-    // Function to determine the level of each node
     const determineLevel = (nodeId, level = 0) => {
-      // Set the level of the current node, ensuring it is the highest level encountered
       levels.set(nodeId, Math.max(level, levels.get(nodeId) || 0));
-      // Get the children of the current node
-      const children = sortedChildrenMap.get(nodeId) || [];
-      // Recursively determine the level of each child node
+      const children = childrenMap.get(nodeId) || [];
       children.forEach((child) => determineLevel(child.id, level + 1));
     };
 
-    // Start determining levels from the root node with id '1'
-    determineLevel('1');
+    determineLevel('1'); // Start with the root node
 
-    // Constants for node dimensions and spacing
-    const NODE_WIDTH = 150;
-    const NODE_HEIGHT = 50;
-    const HORIZONTAL_SPACING = NODE_WIDTH * 2;
-    const VERTICAL_SPACING = NODE_HEIGHT * 2;
+    // Calculate positions
+    const HORIZONTAL_SPACING = 300;
+    const VERTICAL_SPACING = 150;
+    const HANDLE_OFFSET = 50;
 
-    // Function to calculate the position of each node
-    const positionNode = (nodeId, x = 0, y = 0, level = 0) => {
-      // Get the current node from the map
+    const positionNode = (nodeId, parentX = 0, parentY = 0, handle = 'b') => {
       const node = nodeMap.get(nodeId);
-      // Get the children of the current node
-      const children = sortedChildrenMap.get(nodeId) || [];
+      const level = levels.get(nodeId);
+      const children = childrenMap.get(nodeId) || [];
 
-      // Set the position of the current node
+      // Calculate horizontal position
+      const x = parentX + HORIZONTAL_SPACING;
+
+      // Calculate vertical position
+      let y = parentY;
+      if (handle === 'a') y -= HANDLE_OFFSET;
+      if (handle === 'c') y += HANDLE_OFFSET;
+
       node.position = { x, y };
 
-      // If the node has no children, return its height
-      if (children.length === 0) return NODE_HEIGHT;
-
-      let totalHeight = 0;
-      // Iterate through the children and position each child node
+      // Position children
       children.forEach((child, index) => {
-        const childHeight = positionNode(
-          child.id,
-          x + HORIZONTAL_SPACING,
-          y + totalHeight,
-          level + 1
-        );
-        // Accumulate the total height of the children
-        totalHeight += childHeight + VERTICAL_SPACING;
+        positionNode(child.id, x, y, child.handle);
       });
-
-      // Center the parent node vertically relative to its children
-      node.position.y += (totalHeight - VERTICAL_SPACING - NODE_HEIGHT) / 2;
-
-      return totalHeight;
     };
 
-    // Start positioning nodes from the root node with id '1'
-    positionNode('1');
+    positionNode('1'); // Start with the root node
 
-    // Return the array of nodes with their updated positions
     return Array.from(nodeMap.values());
   }, []);
 
-  // Define a function to apply the custom layout using useCallback to memoize it
-  const applyLayout = useCallback(() => {
-    // Generate the new layout of nodes using the customLayout function
-    const newNodes = customLayout(nodes, edges);
-    // Update the state with the newly positioned nodes
-    setNodes(newNodes);
-    // Fit the view to the new layout with a slight delay for rendering
-    setTimeout(() => fitView({ padding: 0.2 }), 50);
-  }, [nodes, edges, setNodes, fitView, customLayout]);
+  const applyLayout = useCallback(
+    (layoutNodes, layoutEdges) => {
+      const newNodes = customLayout(layoutNodes, layoutEdges);
+      setNodes(newNodes);
+      setEdges(layoutEdges);
+      fitView({ padding: 0.2, duration: 800 });
+    },
+    [setNodes, setEdges, fitView, customLayout]
+  );
 
   useEffect(() => {
-    if (shouldArrange) {
-      applyLayout();
-      setShouldArrange(false);
-    }
-  }, [shouldArrange, applyLayout]);
+    applyLayout(nodes, edges);
+  }, []); // Run once on mount
+
+  useEffect(() => {
+    const filteredEdges = edges.filter(
+      (edge) => visibleNodes.has(edge.source) && visibleNodes.has(edge.target)
+    );
+    setVisibleEdges(filteredEdges);
+  }, [edges, visibleNodes]);
 
   const onConnect = useCallback(
     (params) => {
@@ -245,7 +216,10 @@ function FlowApp() {
   );
 
   const addNode = useCallback(
-    (sourceNodeId, handleId) => {
+    (sourceNodeId, handleId, clientX, clientY) => {
+      const sourceNode = nodes.find((node) => node.id === sourceNodeId);
+      if (!sourceNode) return;
+
       const newNodeId = `node-${nodes.length + 1}`;
       const newNode = {
         id: newNodeId,
@@ -254,7 +228,7 @@ function FlowApp() {
           addNode,
           parentHandle: handleId,
         },
-        position: { x: 0, y: 0 },
+        position: { x: 0, y: 0 }, // Position will be set by layout function
         type: 'custom',
         style: { backgroundColor: '#0f172a', color: '#fff' },
       };
@@ -271,42 +245,32 @@ function FlowApp() {
 
       setNodes((nds) => [...nds, newNode]);
       setEdges((eds) => [...eds, newEdge]);
-      setShouldArrange(true);
+
+      setVisibleNodes((visible) => new Set([...visible, newNodeId]));
+
+      // Apply layout after adding new node and edge
+      setTimeout(() => {
+        applyLayout([...nodes, newNode], [...edges, newEdge]);
+      }, 10);
     },
-    [nodes, setNodes, setEdges]
+    [nodes, edges, setNodes, setEdges, applyLayout]
   );
 
-  const handleAutoArrange = () => {
-    setShouldArrange(true);
-  };
+  const autoReArrange = useCallback(() => {
+    applyLayout(nodes, edges);
+  }, [nodes, edges, applyLayout]);
 
   return (
     <div
       style={{ width: '100vw', height: '100vh', backgroundColor: '#334155' }}
     >
-      <button
-        onClick={handleAutoArrange}
-        style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-          zIndex: 4,
-          padding: '5px 10px',
-          backgroundColor: '#0f172a',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '5px',
-          cursor: 'pointer',
-        }}
-      >
-        Auto Arrange
-      </button>
       <ReactFlow
         nodes={nodes.map((node) => ({
           ...node,
           data: { ...node.data, addNode },
+          hidden: !visibleNodes.has(node.id),
         }))}
-        edges={edges}
+        edges={visibleEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -317,6 +281,20 @@ function FlowApp() {
         <Controls />
         <Background color="#333" gap={16} />
       </ReactFlow>
+      <div
+        style={{
+          position: 'absolute',
+          right: 10,
+          top: 10,
+          zIndex: 4,
+          backgroundColor: 'white',
+          padding: '10px',
+          borderRadius: '5px',
+          boxShadow: '0 0 10px rgba(0,0,0,0.3)',
+        }}
+      >
+        <button onClick={autoReArrange}>Auto arrange</button>
+      </div>
     </div>
   );
 }
