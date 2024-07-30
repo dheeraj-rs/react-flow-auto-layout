@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+// Import necessary React and ReactFlow components
+import React, { useCallback, useEffect, useState } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -13,23 +14,27 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+// Define the initial node
 const initialNodes = [
   {
-    id: '1',
+    id: '1', // Unique identifier for the node
     data: {
-      label: 'Node 1',
-      showModal: null,
-      sourceHandles: ['a'],
+      label: 'Node 1', // Text displayed on the node
+      showModal: null, // Function to show modal (will be set later)
+      sourceHandles: ['a'], // Array of source handle identifiers
     },
-    position: { x: 0, y: 0 },
-    type: 'custom',
-    style: { backgroundColor: '#0f172a', color: '#fff' },
+    position: { x: 0, y: 0 }, // Initial position of the node
+    type: 'custom', // Use custom node type
+    style: { backgroundColor: '#0f172a', color: '#fff' }, // Node styling
   },
 ];
 
+// Initialize edges array as empty
 const initialEdges = [];
 
+// Custom node component definition
 const CustomNode = ({ id, data }) => {
+  // Callback function to show modal when adding a new node
   const handleShowModal = useCallback(
     (handleId, event) => {
       event.preventDefault();
@@ -40,7 +45,8 @@ const CustomNode = ({ id, data }) => {
     [id, data]
   );
 
-  const nodeHeight = Math.max(60, data.sourceHandles.length * 40); // Minimum height of 60px, 40px per handle
+  // Calculate node dimensions
+  const nodeHeight = Math.max(60, data.sourceHandles.length * 40);
   const nodePadding = 10;
   const handleSize = 24;
 
@@ -118,6 +124,7 @@ const CustomNode = ({ id, data }) => {
   );
 };
 
+// Custom edge component for curved connections
 const CustomEdge = ({
   id,
   sourceX,
@@ -127,6 +134,7 @@ const CustomEdge = ({
   style = {},
   markerEnd,
 }) => {
+  // Calculate midpoint and add random offset for curve
   const midX = (sourceX + targetX) / 2;
   const offset = Math.random() * 40 - 10;
   const path = `M${sourceX},${sourceY} L${midX + offset},${sourceY} L${
@@ -144,10 +152,12 @@ const CustomEdge = ({
   );
 };
 
+// Define custom edge types
 const edgeTypes = {
   custom: CustomEdge,
 };
 
+// Define arrow style for edges
 const arrowStyle = {
   stroke: '#94a3b8',
   strokeWidth: 1.5,
@@ -157,10 +167,12 @@ const arrowStyle = {
   },
 };
 
+// Define custom node types
 const nodeTypes = {
   custom: CustomNode,
 };
 
+// Modal component for adding new nodes
 const Modal = ({ isOpen, onClose, onConfirm, position }) => {
   const [handleCount, setHandleCount] = useState(1);
 
@@ -202,17 +214,15 @@ const Modal = ({ isOpen, onClose, onConfirm, position }) => {
   );
 };
 
+// Main FlowApp component
 function FlowApp() {
+  // State for nodes and edges
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { fitView } = useReactFlow();
 
-  useEffect(() => {
-    console.clear();
-    console.log('nides : ', nodes);
-  }, [nodes]);
+  // State for auto-arrange, edge dragging, and modal
   const [shouldArrange, setShouldArrange] = useState(false);
-  const layoutAppliedRef = useRef(false);
   const [edgeDragging, setEdgeDragging] = useState(false);
   const [modalState, setModalState] = useState({
     isOpen: false,
@@ -221,14 +231,15 @@ function FlowApp() {
     position: null,
   });
 
-  const ZOOM_LEVEL = 1;
+  const ZOOM_LEVEL = 0.5;
 
+  // Sort children map for consistent layout
   const sortChildrenMap = useCallback((childrenMap) => {
     const sortedMap = new Map();
 
     for (const [key, children] of childrenMap.entries()) {
-      const sortedChildren = children.sort((a, b) =>
-        a.handle.localeCompare(b.handle)
+      const sortedChildren = children.sort(
+        (a, b) => parseInt(a.handle) - parseInt(b.handle)
       );
       sortedMap.set(key, sortedChildren);
     }
@@ -236,13 +247,19 @@ function FlowApp() {
     return sortedMap;
   }, []);
 
+  // Custom layout function
   const customLayout = useCallback(
     (nodes, edges) => {
+      // If there are no nodes, return an empty array
       if (!nodes || nodes.length === 0) return [];
 
+      // Create a map of nodes for quick access
       const nodeMap = new Map(nodes.map((node) => [node.id, { ...node }]));
+
+      // Create a map to store children of each node
       const childrenMap = new Map();
 
+      // Populate the childrenMap based on edges
       edges.forEach((edge) => {
         if (!childrenMap.has(edge.source)) {
           childrenMap.set(edge.source, []);
@@ -252,22 +269,32 @@ function FlowApp() {
           .push({ id: edge.target, handle: edge.sourceHandle });
       });
 
+      // Sort the children map for consistent layout
       const sortedChildrenMap = sortChildrenMap(childrenMap);
+
+      // Create a map to store the level of each node
       const levels = new Map();
 
+      // Recursive function to determine the level of each node
       const determineLevel = (nodeId, level = 0) => {
+        // Set the level for the current node
         levels.set(nodeId, Math.max(level, levels.get(nodeId) || 0));
+        // Get children of the current node
         const children = sortedChildrenMap.get(nodeId) || [];
+        // Recursively determine level for each child
         children.forEach((child) => determineLevel(child.id, level + 1));
       };
 
+      // Start determining levels from the root node (id: '1')
       determineLevel('1');
 
+      // Define layout constants
       const NODE_WIDTH = 150;
       const BASE_NODE_HEIGHT = 60;
       const HORIZONTAL_SPACING = NODE_WIDTH * 1.8;
       const VERTICAL_SPACING = 40;
 
+      // Function to calculate node height based on number of handles
       const getNodeHeight = (node) => {
         return Math.max(
           BASE_NODE_HEIGHT,
@@ -275,6 +302,7 @@ function FlowApp() {
         );
       };
 
+      // Recursive function to position nodes
       const positionNode = (nodeId, x = 0, y = 0) => {
         const node = nodeMap.get(nodeId);
         if (!node) return 0;
@@ -282,11 +310,14 @@ function FlowApp() {
         const children = sortedChildrenMap.get(nodeId) || [];
         const nodeHeight = getNodeHeight(node);
 
+        // Set node position
         node.position = { x, y };
 
+        // If node has no children, return its height
         if (children.length === 0) return nodeHeight;
 
         let totalHeight = 0;
+        // Position each child and calculate total height
         children.forEach((child, index) => {
           const childNode = nodeMap.get(child.id);
           const childHeight = getNodeHeight(childNode);
@@ -299,61 +330,72 @@ function FlowApp() {
             Math.max(childHeight, childTotalHeight) + VERTICAL_SPACING;
         });
 
-        // Adjust parent node position to be centered relative to its children
+        // Center the node vertically relative to its children
         if (children.length > 0) {
           node.position.y += (totalHeight - VERTICAL_SPACING - nodeHeight) / 2;
         }
 
+        // Return the total height of this node and its subtree
         return Math.max(totalHeight, nodeHeight);
       };
 
+      // Start positioning from the root node
       positionNode('1');
 
+      // Return the array of positioned nodes
       return Array.from(nodeMap.values());
     },
-    [sortChildrenMap]
+    [sortChildrenMap] // Dependency array for useCallback
   );
 
+  // Apply layout to nodes
   const applyLayout = useCallback(() => {
-    if (layoutAppliedRef.current) return;
     const newNodes = customLayout(nodes, edges);
     setNodes(newNodes);
     fitView({ padding: 0.2, minZoom: ZOOM_LEVEL, maxZoom: ZOOM_LEVEL });
-    layoutAppliedRef.current = true;
   }, [nodes, edges, setNodes, fitView, customLayout]);
 
+  // Effect to trigger layout when shouldArrange is true
   useEffect(() => {
     if (shouldArrange) {
-      layoutAppliedRef.current = false;
       applyLayout();
       setShouldArrange(false);
     }
   }, [shouldArrange, applyLayout]);
 
+  // Show modal for adding new node
   const showModal = useCallback((sourceNodeId, handleId, position) => {
     setModalState({ isOpen: true, sourceNodeId, handleId, position });
   }, []);
 
+  // Add new node to the graph
   const addNode = useCallback(
     (handleCount) => {
+      // Extract source node ID and handle ID from modal state
       const { sourceNodeId, handleId } = modalState;
+
+      // Generate a new unique node ID
       const newNodeId = `node-${nodes.length + 1}`;
+
+      // Create an array of source handles (1, 2, 3, ...) based on handleCount
       const sourceHandles = Array.from({ length: handleCount }, (_, i) =>
-        String.fromCharCode(97 + i)
+        (i + 1).toString()
       );
 
-      const nodeHeight = Math.max(40, handleCount * 20); // Minimum height of 40px, 20px per handle
+      // Calculate node height based on handle count (minimum 40px)
+      const nodeHeight = Math.max(40, handleCount * 20);
 
+      // Create the new node object
       const newNode = {
         id: newNodeId,
         data: {
           label: `Node ${nodes.length + 1}`,
-          showModal,
+          showModal, // Function to show modal
           parentHandle: handleId,
-          sourceHandles,
+          sourceHandles, // Array of handle IDs
         },
-        position: { x: 0, y: 0 },
-        type: 'custom',
+        position: { x: 0, y: 0 }, // Initial position (will be adjusted by layout)
+        type: 'custom', // Use custom node type
         style: {
           backgroundColor: '#0f172a',
           color: '#fff',
@@ -361,6 +403,7 @@ function FlowApp() {
         },
       };
 
+      // Create a new edge connecting the source node to the new node
       const newEdge = {
         id: `e${sourceNodeId}-${newNodeId}`,
         source: sourceNodeId,
@@ -371,14 +414,18 @@ function FlowApp() {
         style: arrowStyle,
       };
 
+      // Create updated arrays of nodes and edges
       const updatedNodes = [...nodes, newNode];
       const updatedEdges = [...edges, newEdge];
 
+      // Apply custom layout to the updated nodes
       const arrangedNodes = customLayout(updatedNodes, updatedEdges);
 
+      // Update the state with new nodes and edges
       setNodes(arrangedNodes);
       setEdges(updatedEdges);
 
+      // Reset the modal state
       setModalState({
         isOpen: false,
         sourceNodeId: null,
@@ -386,45 +433,40 @@ function FlowApp() {
         position: null,
       });
 
+      // Define zoom level for focusing on the new node
+      const LAYOUT_ZOOM_LEVEL = 0.9;
+
+      // Use setTimeout to ensure the DOM has updated before fitting view
       setTimeout(() => {
+        // Get the last node (which is the newly added node)
         const lastNode = arrangedNodes[arrangedNodes.length - 1];
+        // Fit the view to focus on the new node
         fitView({
           nodes: [lastNode],
-          duration: 500,
-          padding: 0.2,
-          minZoom: ZOOM_LEVEL,
-          maxZoom: ZOOM_LEVEL,
+          duration: 500, // Animation duration in milliseconds
+          padding: 0.2, // Padding around the focused node
+          minZoom: LAYOUT_ZOOM_LEVEL,
+          maxZoom: LAYOUT_ZOOM_LEVEL,
         });
-
-        setNodes((nds) =>
-          nds.map((node) =>
-            node.id === lastNode.id
-              ? {
-                  ...node,
-                  style: { ...node.style, boxShadow: '0 0 10px #ff0' },
-                }
-              : node
-          )
-        );
-
-        setTimeout(() => {
-          setNodes((nds) =>
-            nds.map((node) =>
-              node.id === lastNode.id
-                ? { ...node, style: { ...node.style, boxShadow: 'none' } }
-                : node
-            )
-          );
-        }, 1000);
       }, 0);
     },
-    [nodes, edges, setNodes, setEdges, customLayout, fitView, modalState]
+    [
+      modalState,
+      nodes,
+      showModal,
+      edges,
+      customLayout,
+      setNodes,
+      setEdges,
+      fitView,
+    ]
   );
-
+  // Handle auto-arrange button click
   const handleAutoArrange = () => {
     setShouldArrange(true);
   };
 
+  // Handle new edge connection
   const onConnect = useCallback(
     (params) => {
       if (params.source && params.target) {
@@ -445,10 +487,12 @@ function FlowApp() {
     [setEdges]
   );
 
+  // Set edge dragging state when connection starts
   const onConnectStart = useCallback(() => {
     setEdgeDragging(true);
   }, []);
 
+  // Reset edge dragging state when connection ends
   const onConnectEnd = useCallback(() => {
     if (edgeDragging) {
       setEdgeDragging(false);
@@ -511,6 +555,7 @@ function FlowApp() {
   );
 }
 
+// Wrap FlowApp with ReactFlowProvider
 function App() {
   return (
     <ReactFlowProvider>
