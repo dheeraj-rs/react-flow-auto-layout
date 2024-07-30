@@ -207,10 +207,6 @@ function FlowApp() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { fitView } = useReactFlow();
 
-  useEffect(() => {
-    console.clear();
-    console.log('nides : ', nodes);
-  }, [nodes]);
   const [shouldArrange, setShouldArrange] = useState(false);
   const layoutAppliedRef = useRef(false);
   const [edgeDragging, setEdgeDragging] = useState(false);

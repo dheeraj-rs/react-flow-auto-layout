@@ -22,3 +22,25 @@ body,
   stroke: #222;
   stroke-width: 2px;
 }
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 5px;
+  z-index: 1000;
+}
+
+.custom-node {
+  width: 150px; /* Set a fixed width */
+  background-color: #0f172a;
+  color: #fff;
+  border: 2px solid #333;
+  padding: 10px;
+  border-radius: 5px;
+  text-align: center;
+  transition: box-shadow 0.5s ease-in-out;
+}

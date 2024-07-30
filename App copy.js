@@ -10,17 +10,14 @@ import ReactFlow, {
   Position,
   MarkerType,
   useReactFlow,
+  SmoothStepEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 const initialNodes = [
   {
     id: '1',
-    data: {
-      label: 'Node 1',
-      showModal: null,
-      sourceHandles: ['a'],
-    },
+    data: { label: 'Node 1', addNode: null },
     position: { x: 0, y: 0 },
     type: 'custom',
     style: { backgroundColor: '#0f172a', color: '#fff' },
@@ -30,90 +27,40 @@ const initialNodes = [
 const initialEdges = [];
 
 const CustomNode = ({ id, data }) => {
-  const handleShowModal = useCallback(
+  const handleAddNode = useCallback(
     (handleId, event) => {
       event.preventDefault();
-      const rect = event.target.getBoundingClientRect();
-      const position = { x: rect.left, y: rect.top };
-      data.showModal(id, handleId, position);
+      data.addNode(id, handleId);
     },
     [id, data]
   );
-
-  const nodeHeight = Math.max(60, data.sourceHandles.length * 40); // Minimum height of 60px, 40px per handle
-  const nodePadding = 10;
-  const handleSize = 24;
 
   return (
     <div
       style={{
         backgroundColor: '#0f172a',
         color: '#fff',
-        padding: nodePadding,
+        padding: 10,
         borderRadius: 5,
         position: 'relative',
-        width: '150px',
-        height: `${nodeHeight}px`,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
       }}
     >
-      <div style={{ marginBottom: '10px' }}>{data.label}</div>
+      {data.label}
       <Handle
         type="target"
         position={Position.Left}
-        style={{ background: '#555', left: '-8px' }}
+        style={{ background: '#555' }}
       />
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-        }}
-      >
-        {data.sourceHandles.map((handleId, index) => (
-          <div
-            key={handleId}
-            style={{
-              width: handleSize,
-              height: handleSize,
-              borderRadius: '50%',
-              backgroundColor: '#555',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              cursor: 'pointer',
-              margin: '4px 0',
-              position: 'relative',
-            }}
-            onMouseDown={(event) => handleShowModal(handleId, event)}
-          >
-            <div
-              style={{
-                fontSize: '18px',
-                color: '#fff',
-                lineHeight: `${handleSize}px`,
-              }}
-            >
-              +
-            </div>
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={handleId}
-              style={{
-                opacity: 0,
-                width: '100%',
-                height: '100%',
-                background: 'transparent',
-                border: 'none',
-                right: '-8px',
-              }}
-            />
-          </div>
-        ))}
-      </div>
+      {['a', 'b', 'c', 'd'].map((handleId, index) => (
+        <Handle
+          key={handleId}
+          type="source"
+          position={Position.Right}
+          id={handleId}
+          style={{ top: `${25 + 25 * index}%`, background: '#555' }}
+          onMouseDown={(event) => handleAddNode(handleId, event)}
+        />
+      ))}
     </div>
   );
 };
@@ -124,11 +71,20 @@ const CustomEdge = ({
   sourceY,
   targetX,
   targetY,
+  sourcePosition,
+  targetPosition,
   style = {},
   markerEnd,
 }) => {
   const midX = (sourceX + targetX) / 2;
-  const offset = Math.random() * 40 - 10;
+
+  // Use a larger offset to avoid overlap
+  // const offset = Math.random() * 40 - 20; // Larger offset range
+  // const path = `M${sourceX},${sourceY} Q${midX + offset},${
+  //   (sourceY + targetY) / 2
+  // },${targetX},${targetY}`;
+
+  const offset = Math.random() * 40 - 10; // Random offset to avoid overlap
   const path = `M${sourceX},${sourceY} L${midX + offset},${sourceY} L${
     midX + offset
   },${targetY} L${targetX},${targetY}`;
@@ -145,6 +101,7 @@ const CustomEdge = ({
 };
 
 const edgeTypes = {
+  // custom: SmoothStepEdge,
   custom: CustomEdge,
 };
 
@@ -161,67 +118,16 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-const Modal = ({ isOpen, onClose, onConfirm, position }) => {
-  const [handleCount, setHandleCount] = useState(1);
-
-  if (!isOpen) return null;
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top: position.y,
-        left: position.x,
-        backgroundColor: 'white',
-        padding: '20px',
-        borderRadius: '5px',
-        boxShadow: '0 0 10px rgba(0,0,0,0.3)',
-        zIndex: 1000,
-      }}
-    >
-      <h2>Add New Node</h2>
-      <div>
-        <label>
-          Number of source handles:
-          <input
-            type="number"
-            min="1"
-            max="26"
-            value={handleCount}
-            onChange={(e) =>
-              setHandleCount(
-                Math.min(26, Math.max(1, parseInt(e.target.value) || 1))
-              )
-            }
-          />
-        </label>
-      </div>
-      <button onClick={() => onConfirm(handleCount)}>Create</button>
-      <button onClick={onClose}>Cancel</button>
-    </div>
-  );
-};
-
 function FlowApp() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { fitView } = useReactFlow();
 
-  useEffect(() => {
-    console.clear();
-    console.log('nides : ', nodes);
-  }, [nodes]);
   const [shouldArrange, setShouldArrange] = useState(false);
   const layoutAppliedRef = useRef(false);
-  const [edgeDragging, setEdgeDragging] = useState(false);
-  const [modalState, setModalState] = useState({
-    isOpen: false,
-    sourceNodeId: null,
-    handleId: null,
-    position: null,
-  });
+  const [edgeDragging, setEdgeDragging] = useState(false); // To track if an edge is being dragged
 
-  const ZOOM_LEVEL = 1;
+  const ZOOM_LEVEL = 1; // Adjust this value as needed
 
   const sortChildrenMap = useCallback((childrenMap) => {
     const sortedMap = new Map();
@@ -238,8 +144,6 @@ function FlowApp() {
 
   const customLayout = useCallback(
     (nodes, edges) => {
-      if (!nodes || nodes.length === 0) return [];
-
       const nodeMap = new Map(nodes.map((node) => [node.id, { ...node }]));
       const childrenMap = new Map();
 
@@ -264,47 +168,32 @@ function FlowApp() {
       determineLevel('1');
 
       const NODE_WIDTH = 150;
-      const BASE_NODE_HEIGHT = 60;
-      const HORIZONTAL_SPACING = NODE_WIDTH * 1.8;
-      const VERTICAL_SPACING = 40;
+      const NODE_HEIGHT = 40;
+      const HORIZONTAL_SPACING = NODE_WIDTH * 1.5; // Increased spacing
+      const VERTICAL_SPACING = NODE_HEIGHT * 1; // Increased spacing
 
-      const getNodeHeight = (node) => {
-        return Math.max(
-          BASE_NODE_HEIGHT,
-          (node.data.sourceHandles?.length || 1) * 40
-        );
-      };
-
-      const positionNode = (nodeId, x = 0, y = 0) => {
+      const positionNode = (nodeId, x = 0, y = 0, level = 0) => {
         const node = nodeMap.get(nodeId);
-        if (!node) return 0;
-
         const children = sortedChildrenMap.get(nodeId) || [];
-        const nodeHeight = getNodeHeight(node);
 
         node.position = { x, y };
 
-        if (children.length === 0) return nodeHeight;
+        if (children.length === 0) return NODE_HEIGHT;
 
         let totalHeight = 0;
         children.forEach((child, index) => {
-          const childNode = nodeMap.get(child.id);
-          const childHeight = getNodeHeight(childNode);
-          const childTotalHeight = positionNode(
+          const childHeight = positionNode(
             child.id,
             x + HORIZONTAL_SPACING,
-            y + totalHeight
+            y + totalHeight,
+            level + 1
           );
-          totalHeight +=
-            Math.max(childHeight, childTotalHeight) + VERTICAL_SPACING;
+          totalHeight += childHeight + VERTICAL_SPACING;
         });
 
-        // Adjust parent node position to be centered relative to its children
-        if (children.length > 0) {
-          node.position.y += (totalHeight - VERTICAL_SPACING - nodeHeight) / 2;
-        }
+        node.position.y += (totalHeight - VERTICAL_SPACING - NODE_HEIGHT) / 2;
 
-        return Math.max(totalHeight, nodeHeight);
+        return totalHeight;
       };
 
       positionNode('1');
@@ -315,50 +204,35 @@ function FlowApp() {
   );
 
   const applyLayout = useCallback(() => {
+    const ZOOM_LEVEL = 0.7; // Adjust this value as needed
+
     if (layoutAppliedRef.current) return;
     const newNodes = customLayout(nodes, edges);
     setNodes(newNodes);
     fitView({ padding: 0.2, minZoom: ZOOM_LEVEL, maxZoom: ZOOM_LEVEL });
     layoutAppliedRef.current = true;
   }, [nodes, edges, setNodes, fitView, customLayout]);
-
   useEffect(() => {
     if (shouldArrange) {
-      layoutAppliedRef.current = false;
+      layoutAppliedRef.current = false; // Reset layout applied status
       applyLayout();
       setShouldArrange(false);
     }
   }, [shouldArrange, applyLayout]);
 
-  const showModal = useCallback((sourceNodeId, handleId, position) => {
-    setModalState({ isOpen: true, sourceNodeId, handleId, position });
-  }, []);
-
   const addNode = useCallback(
-    (handleCount) => {
-      const { sourceNodeId, handleId } = modalState;
+    (sourceNodeId, handleId) => {
       const newNodeId = `node-${nodes.length + 1}`;
-      const sourceHandles = Array.from({ length: handleCount }, (_, i) =>
-        String.fromCharCode(97 + i)
-      );
-
-      const nodeHeight = Math.max(40, handleCount * 20); // Minimum height of 40px, 20px per handle
-
       const newNode = {
         id: newNodeId,
         data: {
           label: `Node ${nodes.length + 1}`,
-          showModal,
+          addNode,
           parentHandle: handleId,
-          sourceHandles,
         },
         position: { x: 0, y: 0 },
         type: 'custom',
-        style: {
-          backgroundColor: '#0f172a',
-          color: '#fff',
-          height: `${nodeHeight}px`,
-        },
+        style: { backgroundColor: '#0f172a', color: '#fff' },
       };
 
       const newEdge = {
@@ -374,18 +248,13 @@ function FlowApp() {
       const updatedNodes = [...nodes, newNode];
       const updatedEdges = [...edges, newEdge];
 
+      // Apply layout immediately
       const arrangedNodes = customLayout(updatedNodes, updatedEdges);
 
       setNodes(arrangedNodes);
       setEdges(updatedEdges);
 
-      setModalState({
-        isOpen: false,
-        sourceNodeId: null,
-        handleId: null,
-        position: null,
-      });
-
+      // Highlight and focus on the new node
       setTimeout(() => {
         const lastNode = arrangedNodes[arrangedNodes.length - 1];
         fitView({
@@ -396,6 +265,7 @@ function FlowApp() {
           maxZoom: ZOOM_LEVEL,
         });
 
+        // Optionally, you can add a visual highlight to the new node
         setNodes((nds) =>
           nds.map((node) =>
             node.id === lastNode.id
@@ -407,6 +277,7 @@ function FlowApp() {
           )
         );
 
+        // Remove the highlight after a short delay
         setTimeout(() => {
           setNodes((nds) =>
             nds.map((node) =>
@@ -415,18 +286,18 @@ function FlowApp() {
                 : node
             )
           );
-        }, 1000);
+        }, 1000); // Remove highlight after 1 second
       }, 0);
     },
-    [nodes, edges, setNodes, setEdges, customLayout, fitView, modalState]
+    [nodes, edges, setNodes, setEdges, customLayout, fitView]
   );
-
   const handleAutoArrange = () => {
     setShouldArrange(true);
   };
 
   const onConnect = useCallback(
     (params) => {
+      // Only add valid edges and prevent displaying dragging line
       if (params.source && params.target) {
         setEdges((eds) =>
           addEdge(
@@ -439,19 +310,19 @@ function FlowApp() {
             eds
           )
         );
-        setEdgeDragging(false);
+        setEdgeDragging(false); // Edge connection completed
       }
     },
     [setEdges]
   );
 
   const onConnectStart = useCallback(() => {
-    setEdgeDragging(true);
+    setEdgeDragging(true); // Start edge dragging
   }, []);
 
   const onConnectEnd = useCallback(() => {
     if (edgeDragging) {
-      setEdgeDragging(false);
+      setEdgeDragging(false); // End edge dragging
     }
   }, [edgeDragging]);
 
@@ -476,23 +347,10 @@ function FlowApp() {
       >
         Auto Arrange
       </button>
-      <Modal
-        isOpen={modalState.isOpen}
-        onClose={() =>
-          setModalState({
-            isOpen: false,
-            sourceNodeId: null,
-            handleId: null,
-            position: null,
-          })
-        }
-        onConfirm={addNode}
-        position={modalState.position || { x: 0, y: 0 }}
-      />
       <ReactFlow
         nodes={nodes.map((node) => ({
           ...node,
-          data: { ...node.data, showModal },
+          data: { ...node.data, addNode },
         }))}
         edges={edges}
         onNodesChange={onNodesChange}
